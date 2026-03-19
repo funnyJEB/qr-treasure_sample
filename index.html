@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>QR 보물찾기 by금배과학</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Gamja+Flower&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+    <style>
+        /* [스타일 정의] */
+        :root {
+            --primary: #4CAF50;
+            --secondary: #FF9800;
+            --danger: #FF5722;
+            --bg: #F0F9F0;
+            --text: #333;
+        }
+        body {
+            font-family: 'Gamja Flower', sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            padding: 0;
+            color: var(--text);
+            text-align: center;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            min-height: 100vh;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* 1. 시작 화면 */
+        #start-screen {
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        .main-img { width: 80%; max-height: 300px; object-fit: cover; border-radius: 20px; margin: 20px 0; }
+
+        /* 2. 게임 화면 */
+        #game-screen { display: none; padding: 20px; padding-bottom: 80px; }
+        
+        /* 카메라 영역 */
+        #camera-area {
+            width: 100%;
+            min-height: 300px;
+            background: #000;
+            border-radius: 20px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.2);
+        }
+
+        #reader { width: 100%; height: 100%; }
+        #reader video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
+        }
+
+        /* 가짜 하얀 테두리 */
+        .scan-frame {
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            border: 4px solid rgba(255, 255, 255, 0.9);
+            border-radius: 20px;
+            box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.6);
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        /* [수정됨] 카메라 대기 화면 (밝은 테마 적용!) */
+        #camera-placeholder {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            
+            /* 🔥 에메랄드 숲 테마 (밝은 초록색) */
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            cursor: pointer;
+            z-index: 20;
+            transition: all 0.2s;
+        }
+        #camera-placeholder:active { transform: scale(0.98); filter: brightness(0.9); }
+        
+        .camera-icon { 
+            font-size: 5rem; 
+            margin-bottom: 15px; 
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));
+        }
+        .camera-text {
+            font-size: 1.5rem;
+            font-weight: bold;
+            border: 3px solid rgba(255,255,255,0.8);
+            padding: 10px 25px;
+            border-radius: 50px;
+            background: rgba(255,255,255,0.2);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        /* 목표 구역 */
+        .goal-area {
+            background: #fff8e1;
+            border: 2px dashed var(--secondary);
+            border-radius: 15px;
+            padding: 10px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+        .goal-icon { font-size: 3rem; }
+        .goal-info { text-align: left; }
+        .goal-title { font-size: 1.2rem; margin: 0; color: #d35400; font-weight: bold; }
+        .goal-progress { font-size: 0.9rem; color: #666; margin-top: 2px; }
+        
+        @keyframes shake {
+            0% { transform: rotate(0deg); } 25% { transform: rotate(-5deg); }
+            50% { transform: rotate(5deg); } 75% { transform: rotate(-5deg); } 100% { transform: rotate(0deg); }
+        }
+        .unlocked-anim { animation: shake 0.5s infinite; border-color: #27ae60 !important; background: #e8f8f5 !important; }
+
+        /* 가방 */
+        .bag-container { background: #eee; border-radius: 15px; padding: 15px; }
+        .grid-box { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px;}
+        
+        /* 아이템 슬롯 */
+        .item-slot {
+            aspect-ratio: 1/1; background: white; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            cursor: pointer; position: relative;
+            transition: transform 0.1s;
+        }
+        .item-slot.locked { 
+            filter: grayscale(100%); opacity: 0.4; background: #e0e0e0;
+            cursor: default; transform: scale(0.95);
+        }
+        .item-slot.found {
+            filter: grayscale(0%); opacity: 1; border: 2px solid var(--primary);
+        }
+        .item-slot.found:active { transform: scale(0.9); }
+        .item-check { position: absolute; bottom: -5px; right: -5px; font-size: 1rem; filter: none !important;}
+
+        /* 팝업 */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 999; display: none;
+            align-items: center; justify-content: center;
+        }
+        .modal-box {
+            background: white; width: 85%; max-width: 320px; max-height: 80vh;
+            overflow-y: auto; border-radius: 20px; padding: 20px; 
+            text-align: center; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .image-scroll-box {
+            display: flex; flex-direction: column; gap: 10px; margin: 15px 0;
+            max-height: 200px; overflow-y: auto; border-radius: 10px;
+        }
+        .reward-img { width: 100%; border-radius: 10px; }
+
+        .btn {
+            background: var(--primary); color: white; border: none;
+            padding: 10px 20px; font-size: 1.1rem; border-radius: 50px;
+            cursor: pointer; font-family: 'Gamja Flower', sans-serif; margin-top: 10px; width: 100%;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        .btn:active { transform: translateY(2px); box-shadow: none; }
+        .btn-secondary { background: var(--secondary); }
+        .btn-danger { background: var(--danger); }
+        
+        input[type="text"] {
+            width: 80%; padding: 10px; font-size: 1.1rem;
+            border: 2px solid #ddd; border-radius: 10px; margin: 10px 0; text-align: center;
+            font-family: 'Gamja Flower', sans-serif;
+        }
+
+        /* 관리자 */
+        .admin-btn {
+            margin-top: 30px; background: none; border: 1px solid #ccc; color: #999;
+            padding: 5px 10px; border-radius: 5px; font-size: 0.8rem; cursor: pointer;
+        }
+        .admin-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 15px 0; }
+        .admin-item { border: 2px solid #ddd; border-radius: 10px; padding: 10px; font-size: 1.5rem; cursor: pointer; }
+        .admin-item:hover { background: #ffebee; border-color: red; }
+
+        /* 토스트 메시지 */
+        #toast {
+            visibility: hidden; min-width: 250px; background-color: rgba(0,0,0,0.8); color: #fff;
+            text-align: center; border-radius: 50px; padding: 16px; position: fixed;
+            z-index: 1000; left: 50%; bottom: 80px; transform: translateX(-50%);
+            font-size: 1rem; opacity: 0; transition: opacity 0.3s;
+        }
+        #toast.show { visibility: visible; opacity: 1; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    
+    <div id="start-screen">
+        <h1 id="title-text" style="font-size: 2.5rem; margin-bottom: 10px;">로딩중...</h1>
+        <p id="subtitle-text" style="font-size: 1.2rem; color: #666;">잠시만 기다려주세요</p>
+        <img id="intro-img" class="main-img" src="" alt="Intro">
+        <p id="intro-desc" style="white-space: pre-wrap;">설명글 로딩중...</p>
+        <button class="btn" onclick="Game.initGame()">모험 시작하기 ▶</button>
+        <p style="font-size: 0.8rem; color: #aaa; margin-top: 30px;">QR URL: <span id="site-url-text"></span></p>
+    </div>
+
+    <div id="game-screen">
+        
+        <div id="final-goal" class="goal-area" onclick="Game.checkFinalStatus()">
+            <div id="final-icon" class="goal-icon">🎁</div>
+            <div class="goal-info">
+                <div id="final-title" class="goal-title">보물상자</div>
+                <div id="final-progress" class="goal-progress">열쇠 모으는 중... (0/0)</div>
+            </div>
+        </div>
+
+        <div id="camera-area">
+            <div id="reader"></div>
+            
+            <div class="scan-frame"></div>
+
+            <div id="camera-placeholder" onclick="Game.openCamera()">
+                <div class="camera-icon">📷</div>
+                <div class="camera-text">카메라 켜기</div>
+            </div>
+        </div>
+
+        <div class="bag-container">
+            <div style="font-weight: bold; margin-bottom: 5px;">🎒 나의 가방</div>
+            <div id="inventory-grid" class="grid-box"></div>
+        </div>
+
+        <button class="admin-btn" onclick="Admin.openMenu()">⚙️ 관리자 설정</button>
+    </div>
+
+    <div id="modal" class="modal-overlay">
+        <div class="modal-box">
+            <button class="btn-secondary" style="position:absolute; top:10px; right:10px; padding:5px 10px; font-size:1rem; width:auto;" onclick="Popup.close()">✖</button>
+            <div id="modal-content"></div>
+        </div>
+    </div>
+
+    <div id="admin-modal" class="modal-overlay">
+        <div class="modal-box">
+            <h2 style="margin-top:0;">⚙️ 관리자 설정</h2>
+            <button class="btn btn-danger" onclick="Admin.resetAll()">🔄 전체 데이터 초기화</button>
+            <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+            <p style="text-align:left; font-weight:bold; margin-bottom:5px;">🗑️ 찾아낸 QR 취소하기</p>
+            <div id="admin-list" class="admin-grid"></div>
+            <button class="btn btn-secondary" onclick="Admin.closeMenu()">닫기</button>
+        </div>
+    </div>
+    
+    <div id="toast">메시지</div>
+
+</div>
+
+<script>
+/**
+ * ============================================================================
+ * 🛠️ [gameConfig] 설정 영역
+ * ============================================================================
+ */
+const gameConfig = {
+    meta: {
+        title: "🕵️‍♀️ QR 보물찾기",
+        subTitle: "숨겨진 QR들을 모두 찾아 보물상자를 열어보세요!",
+        siteUrl: "https://funnyjeb.github.io/qr-treasure2", 
+        introImage: "./images/start.png",
+        introDesc: `1. 주변에 숨겨진 QR을 찾아보세요.
+        2. QR을 찾았다면 '카메라 켜기'를 눌러 스캔!
+        3. 정확한 QR을 인식하면 특별한 일이 일어나요.
+        4. 문제가 나온다면 정답도 맞춰야 해요!
+        5. 모든 QR을 찾아 보물상자를 열었다면 선생님께 오세요!`,
+        msgCorrect: "정답입니다! 🎉",
+        msgWrong: "틀렸습니다. 다시 시도해보세요. 😅",
+        msgAlreadyFound: "이미 찾은 보물입니다!"
+    },
+    finalReward: {
+        icon: "🔓", title: "축하합니다!",
+        images: ["https://cdn-icons-png.flaticon.com/512/2855/2855523.png"], 
+        desc: `모든 미션을 완료했습니다!
+        선생님께 이 화면을 보여주세요.`
+    },
+    qrData: {
+        "saturn": {
+            icon: "🪐", name: "토성",
+            quiz: { active: true, question: "태양계 행성중 가장 크고 무거운 행성은?", answers: ["목성"] },
+            reward: { desc: "토성을 찾았습니다!\n다음 장소에 대한 힌트 ⬇️", images: ["https://cdn-icons-png.flaticon.com/512/616/616408.png"] }
+        },
+        "dog": {
+            icon: "🐶", name: "강아지",
+            quiz: { active: true, question: "별의 일주 운동은 지구가 OO하기 때문에 나타난다.", answers: ["자전"] },
+            reward: { desc: "강아지를 찾았습니다!\n다음 장소에 대한 힌트 ⬇️", images: ["https://cdn-icons-png.flaticon.com/512/616/616408.png"] }
+        },
+        "airplane": {
+            icon: "✈️", name: "비행기",
+            quiz: { active: true, question: "태양의 코로나를 볼 수 있는 시기는?", answers: ["개기 일식", "개기일식"] },
+            reward: { desc: "비행기를 찾았습니다!\n다음 장소에 대한 힌트 ⬇️", images: ["https://cdn-icons-png.flaticon.com/512/616/616408.png"] }
+        },
+        "pen": {
+            icon: "✒️", name: "펜",
+            quiz: { active: true, question: "달이 태양과 가장 멀리 있을 때의 위상은?", answers: ["망", "보름"] },
+            reward: { desc: "펜을 찾았습니다!\n다음 장소에 대한 힌트 ⬇️", images: ["https://cdn-icons-png.flaticon.com/512/616/616408.png"] }
+        },
+        "bird": {
+            icon: "🐦", name: "새",
+            quiz: { active: true, question: "태양 표면에 쌀알무늬는 태양이 oo하기 때문에 나타난다.", answers: ["대류"] },
+            reward: { desc: "새를 찾았습니다!\n다음 장소에 대한 힌트 ⬇️", images: ["https://cdn-icons-png.flaticon.com/512/616/616408.png"] }
+        },
+        "crown": {
+            icon: "👑", name: "왕관",
+            quiz: { active: true, question: "태양의 대기에서 관찰되는 고리형태의 불꽃의 이름은?", answers: ["홍염"] },
+            reward: { desc: "왕관을 찾았습니다!\n다음 장소에 대한 힌트 ⬇️", images: ["https://cdn-icons-png.flaticon.com/512/616/616408.png"] }
+        },
+        "telescope": {
+            icon: "🔭", name: "망원경",
+            quiz: { active: true, question: "안전하게 흑점을 관찰하기 위해 필요한 도구는?", answers: ["투영판", "태양필터", "태양 필터"] },
+            reward: { desc: "망원경을 찾았습니다!\n다음 장소에 대한 힌트 ⬇️", images: ["https://cdn-icons-png.flaticon.com/512/616/616408.png"] }
+        },
+        "star": {
+            icon: "⭐", name: "별",
+            quiz: { active: true, question: "8월에 해가 진 직후 서쪽 지평선 근처에 보이는 별자리는?", answers: ["사자자리"] },
+            reward: { desc: "별을 찾았습니다!\n다음 장소에 대한 힌트 ⬇️", images: ["https://cdn-icons-png.flaticon.com/512/616/616408.png"] }
+        }
+    }
+};
+
+/**
+ * ============================================================================
+ * 🚀 [시스템 로직]
+ * ============================================================================
+ */
+const STORAGE_KEY = "qr_treasure_v13_save";
+
+const Game = {
+    foundItems: new Set(),
+    totalItems: 0,
+    scanner: null,
+
+    init: () => {
+        document.getElementById('title-text').innerText = gameConfig.meta.title;
+        document.getElementById('subtitle-text').innerText = gameConfig.meta.subTitle;
+        document.getElementById('intro-img').src = gameConfig.meta.introImage;
+        document.getElementById('intro-desc').innerText = gameConfig.meta.introDesc;
+        document.getElementById('site-url-text').innerText = gameConfig.meta.siteUrl;
+
+        Game.totalItems = Object.keys(gameConfig.qrData).length;
+        const savedData = localStorage.getItem(STORAGE_KEY);
+        if (savedData) {
+            const parsed = JSON.parse(savedData);
+            parsed.forEach(id => { if(gameConfig.qrData[id]) Game.foundItems.add(id); });
+        }
+        Game.updateUI();
+    },
+
+    initGame: () => {
+        document.getElementById('start-screen').style.display = 'none';
+        document.getElementById('game-screen').style.display = 'block';
+    },
+
+    openCamera: () => {
+        document.getElementById('camera-placeholder').style.display = 'none';
+        
+        if(!Game.scanner) {
+            Game.scanner = new Html5Qrcode("reader");
+        }
+        
+        const config = { fps: 10 };
+        
+        Game.scanner.start({ facingMode: "environment" }, config, Game.onScan)
+        .catch(err => {
+            alert("카메라 시작 오류 (HTTPS 필수): " + err);
+            Game.closeCamera();
+        });
+    },
+
+    closeCamera: () => {
+        if(Game.scanner) {
+            Game.scanner.stop().then(() => {
+                Game.scanner.clear();
+                document.getElementById('camera-placeholder').style.display = 'flex';
+            }).catch(err => {
+                console.log("Stop failed", err);
+                document.getElementById('camera-placeholder').style.display = 'flex';
+            });
+        } else {
+            document.getElementById('camera-placeholder').style.display = 'flex';
+        }
+    },
+
+    onScan: (decodedText, decodedResult) => {
+        Game.closeCamera();
+
+        const id = decodedText.trim();
+        const item = gameConfig.qrData[id];
+
+        if (!item) { 
+            Toast.show("알 수 없는 QR코드입니다.");
+            return; 
+        }
+
+        if (Game.foundItems.has(id)) {
+            Toast.show(gameConfig.meta.msgAlreadyFound);
+            return;
+        }
+
+        if (item.quiz && item.quiz.active) {
+            Popup.showQuiz(id);
+        } else {
+            Game.getItem(id);
+        }
+    },
+
+    getItem: (id) => {
+        Game.foundItems.add(id);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify([...Game.foundItems]));
+        Game.updateUI();
+        Popup.showReward(id, true);
+    },
+
+    updateUI: () => {
+        const grid = document.getElementById('inventory-grid');
+        grid.innerHTML = "";
+        Object.keys(gameConfig.qrData).forEach(key => {
+            const item = gameConfig.qrData[key];
+            const isFound = Game.foundItems.has(key);
+            
+            const slot = document.createElement('div');
+            slot.className = `item-slot ${isFound ? 'found' : 'locked'}`;
+            slot.innerText = item.icon;
+            
+            if (isFound) {
+                slot.innerHTML += `<span class="item-check">✅</span>`;
+                slot.onclick = () => { Popup.showReward(key, false); };
+            }
+            grid.appendChild(slot);
+        });
+
+        const current = Game.foundItems.size;
+        const total = Game.totalItems;
+        const goalArea = document.getElementById('final-goal');
+        const finalTitle = document.getElementById('final-title');
+        const finalIcon = document.getElementById('final-icon');
+
+        if (current >= total) {
+            finalIcon.innerText = gameConfig.finalReward.icon;
+            finalTitle.innerText = "상자 열림! (터치)";
+            finalTitle.style.color = "#27ae60";
+            document.getElementById('final-progress').innerText = "모든 열쇠 획득! 터치하세요.";
+            goalArea.classList.add('unlocked-anim');
+        } else {
+            finalIcon.innerText = "🎁";
+            finalTitle.innerText = "최종 보물상자";
+            finalTitle.style.color = "#d35400";
+            document.getElementById('final-progress').innerText = `열쇠 모으는 중... (${current}/${total})`;
+            goalArea.classList.remove('unlocked-anim');
+        }
+    },
+
+    checkFinalStatus: () => {
+        if (Game.foundItems.size >= Game.totalItems) {
+            Popup.showFinalReward();
+        } else {
+            Toast.show(`아직 열쇠가 부족해요! (${Game.foundItems.size}/${Game.totalItems})`);
+        }
+    }
+};
+
+const Popup = {
+    overlay: document.getElementById('modal'),
+    content: document.getElementById('modal-content'),
+
+    showQuiz: (id) => {
+        const item = gameConfig.qrData[id];
+        Popup.content.innerHTML = `
+            <h2>🧩 퀴즈!</h2>
+            <p style="font-size:1.2rem; font-weight:bold;">${item.quiz.question}</p>
+            <input type="text" id="quiz-input" placeholder="정답 입력" autocomplete="off">
+            <br>
+            <div id="quiz-msg" style="color:red; height:20px; font-size:0.9rem;"></div>
+            <button class="btn" onclick="Popup.checkAnswer('${id}')">확인</button>
+        `;
+        Popup.overlay.style.display = "flex";
+        document.getElementById('quiz-input').focus();
+    },
+
+    checkAnswer: (id) => {
+        const input = document.getElementById('quiz-input').value.trim().toLowerCase().replace(/\s+/g, '');
+        const answers = gameConfig.qrData[id].quiz.answers.map(a => a.toLowerCase().replace(/\s+/g, ''));
+        if (answers.includes(input)) {
+            Toast.show(gameConfig.meta.msgCorrect);
+            Game.getItem(id);
+        } else {
+            document.getElementById('quiz-msg').innerText = gameConfig.meta.msgWrong;
+            const inputEl = document.getElementById('quiz-input');
+            inputEl.value = ""; inputEl.focus();
+            inputEl.style.borderColor = "red";
+            setTimeout(() => inputEl.style.borderColor = "#ddd", 500);
+        }
+    },
+
+    showReward: (id, isNew) => {
+        const item = gameConfig.qrData[id];
+        let imgHtml = "";
+        if (item.reward.images && item.reward.images.length > 0) {
+            imgHtml = `<div class="image-scroll-box">` + 
+                item.reward.images.map(url => `<img src="${url}" class="reward-img">`).join('') + `</div>`;
+        }
+        
+        Popup.content.innerHTML = `
+            <div style="font-size:4rem;">${item.icon}</div>
+            <h2>${item.name}</h2>
+            
+            <div style="background:#f9f9f9; padding:10px; border-radius:10px; text-align:left; white-space: pre-wrap;">${item.reward.desc}</div>
+            
+            ${imgHtml}
+            
+            <button class="btn btn-secondary" onclick="Popup.closeAndCheckClear()">확인</button>
+        `;
+        Popup.overlay.style.display = "flex";
+    },
+
+    showFinalReward: () => {
+        const final = gameConfig.finalReward;
+        let imgHtml = "";
+        if (final.images && final.images.length > 0) {
+            imgHtml = `<div class="image-scroll-box">` + 
+                final.images.map(url => `<img src="${url}" class="reward-img">`).join('') + `</div>`;
+        }
+        Popup.content.innerHTML = `
+            <div style="font-size:4rem;">${final.icon}</div>
+            <h2 style="color:#27ae60;">${final.title}</h2>
+            ${imgHtml}
+            <div style="background:#e8f8f5; padding:15px; border-radius:10px; text-align:left; white-space: pre-wrap; font-weight:bold;">${final.desc}</div>
+            <button class="btn" onclick="Popup.close()">닫기</button>
+        `;
+        Popup.overlay.style.display = "flex";
+    },
+
+    closeAndCheckClear: () => {
+        Popup.close();
+        if (Game.foundItems.size === Game.totalItems) {
+            setTimeout(() => { Toast.show("🎉 모든 미션 완료!"); Popup.showFinalReward(); }, 600);
+        }
+    },
+
+    close: () => {
+        Popup.overlay.style.display = "none";
+    }
+};
+
+const Admin = {
+    openMenu: () => {
+        const password = prompt("관리자 비밀번호");
+        if (password !== "1234") {
+            if(password !== null) alert("비밀번호 불일치");
+            return;
+        }
+        Admin.renderList();
+        document.getElementById('admin-modal').style.display = 'flex';
+    },
+
+    closeMenu: () => {
+        document.getElementById('admin-modal').style.display = 'none';
+        Game.updateUI(); 
+    },
+
+    renderList: () => {
+        const list = document.getElementById('admin-list');
+        list.innerHTML = "";
+        if(Game.foundItems.size === 0) {
+            list.innerHTML = "<p style='grid-column:1/-1; color:#999;'>찾은 아이템이 없습니다.</p>";
+            return;
+        }
+        Game.foundItems.forEach(id => {
+            const item = gameConfig.qrData[id];
+            const div = document.createElement('div');
+            div.className = "admin-item";
+            div.innerHTML = item.icon;
+            div.onclick = () => Admin.deleteItem(id);
+            list.appendChild(div);
+        });
+    },
+
+    deleteItem: (id) => {
+        const item = gameConfig.qrData[id];
+        if(confirm(`'${item.name}' (${item.icon}) 획득을 취소하시겠습니까?`)) {
+            Game.foundItems.delete(id);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify([...Game.foundItems]));
+            Admin.renderList(); 
+            Toast.show("삭제되었습니다.");
+        }
+    },
+
+    resetAll: () => {
+        if(confirm("🚨 경고: 찾아낸 모든 QR이 사라집니다.\n정말 초기화하시겠습니까?")) {
+            localStorage.removeItem(STORAGE_KEY);
+            location.reload();
+        }
+    }
+};
+
+const Toast = {
+    show: (message) => {
+        const toast = document.getElementById("toast");
+        toast.className = "show";
+        toast.innerText = message;
+        setTimeout(() => toast.className = toast.className.replace("show", ""), 3000);
+    }
+};
+
+document.addEventListener("DOMContentLoaded", Game.init);
+</script>
+</body>
+</html>
