@@ -1,1 +1,1 @@
-# qr-treasure2
+# qr-treasure_sample
